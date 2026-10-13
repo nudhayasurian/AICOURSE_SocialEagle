@@ -1,0 +1,3 @@
+create a scale prompt to genarate an image to describe tamil nadu culture, 
+which include pongal celebration, 
+challi kattu, madurai meenachi temple, margali kollam, bharatanatiam
