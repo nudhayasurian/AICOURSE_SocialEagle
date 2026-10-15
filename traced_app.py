@@ -19,6 +19,14 @@ model = ChatOpenAI(
     temperature=0
 )
 
-response = model.invoke("Explain LangSmith in simple terms.")
+#response = model.invoke("Explain LangSmith in simple terms.")
 
-print("AI Response:", response.content)
+#print("AI Response:", response.content)
+prompts = ["Explain LangSmith in simple terms.", 
+           "concept of error rate in langsmith",
+           "how langsmith can be used to improve model performance","how langsmith can be used to track model performance over time"
+          ]  
+for p in prompts:
+    response = model.invoke(p)
+    print("AI Response:", response.content)
+    
