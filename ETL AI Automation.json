@@ -1,0 +1,189 @@
+{
+  "name": "ETL AI Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Student data",
+        "formDescription": "upload student data",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "file upload",
+              "fieldType": "file"
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        -784,
+        -144
+      ],
+      "id": "c7d07cf0-a7cd-49cf-902a-24303b86789f",
+      "name": "Excel upload",
+      "webhookId": "ceb8c78a-61e1-4135-bb07-0b7b94d114a0"
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "binaryPropertyName": "file_upload",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -512,
+        -144
+      ],
+      "id": "ef9cb5f3-20ec-4ad9-af45-7e0343fd182a",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Clean this student enrollment row and return ONLY a JSON object.\\n\\nRow data: {{ JSON.stringify($json) }}\\n\\nRules:\\n- Full_Name: Title Case (Manoj K)\\n- Email: if invalid set INVALID_EMAIL\\n- Phone: if less than 10 digits set MISSING\\n- Course: only Astrology or Biology or Business or Computer Science or Mathematics or Physics\\n- City: Title Case, empty = UNKNOWN\\n- Enrollment_Date: convert to YYYY-MM-DD\\n\\nReturn ONLY raw JSON. No explanation. No markdown.",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": []
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -320,
+        -144
+      ],
+      "id": "39121c1f-e243-4033-893e-564ba8c8c50b",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -320,
+        128
+      ],
+      "id": "6391a709-5f6d-4761-a7ec-fe749db0ca3b",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "77XCtkGMVkZaIvy1",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\n/*\n STUDENT DATA ETL - n8n\n Supports:\n 1. Excel Extract From File output\n 2. Basic LLM Chain JSON text output\n\n Operations:\n - Parse JSON\n - Clean text and numbers\n - Normalize dates and phone numbers\n - Validate mandatory fields\n - Detect duplicates\n - Classify VALID / INVALID\n - Produce error details\n*/\n\nconst items = $input.all();\n\nconst seenIds = new Set();\nconst seenEmails = new Set();\n\nconst validCourses = [\n  \"Mathematics\",\n  \"Physics\",\n  \"Business\",\n  \"Biology\",\n  \"Computer Science\"\n];\n\nconst validStatuses = [\"Active\", \"Inactive\"];\n\n// --------------------------------------------------\n// 1. PARSE INPUT\n// --------------------------------------------------\n\nfunction parseInput(item) {\n  const data = item.json;\n\n  if (typeof data.text !== \"string\") {\n    return data;\n  }\n\n  let text = data.text.trim();\n\n  // Remove optional Markdown code fences\n  text = text\n    .replace(/^```(?:json)?\\s*/i, \"\")\n    .replace(/\\s*```$/, \"\")\n    .trim();\n\n  const parsed = JSON.parse(text);\n\n  if (\n    !parsed ||\n    typeof parsed !== \"object\" ||\n    Array.isArray(parsed)\n  ) {\n    throw new Error(\"Expected one student JSON object\");\n  }\n\n  return parsed;\n}\n\n// --------------------------------------------------\n// 2. CLEANING FUNCTIONS\n// --------------------------------------------------\n\nfunction cleanText(value) {\n  return String(value ?? \"\")\n    .trim()\n    .replace(/\\s+/g, \" \");\n}\n\nfunction titleCase(value) {\n  return cleanText(value)\n    .toLowerCase()\n    .replace(/\\b[a-z]/g, char => char.toUpperCase());\n}\n\nfunction cleanEmail(value) {\n  return cleanText(value).toLowerCase();\n}\n\nfunction cleanPhone(value) {\n  return cleanText(value).replace(/[\\s().-]/g, \"\");\n}\n\nfunction cleanNumber(value) {\n  const text = cleanText(value).replace(/%$/, \"\");\n\n  if (!text || !/^[+-]?\\d+(\\.\\d+)?$/.test(text)) {\n    return null;\n  }\n\n  const number = Number(text);\n\n  return Number.isFinite(number) ? number : null;\n}\n\n// --------------------------------------------------\n// 3. DATE NORMALIZATION\n// --------------------------------------------------\n\nfunction cleanDate(value) {\n  if (value === null || value === undefined || value === \"\") {\n    return null;\n  }\n\n  // Numeric Excel serial date\n  if (typeof value === \"number\") {\n    if (\n      !Number.isInteger(value) ||\n      value < 1 ||\n      value > 2958465\n    ) {\n      return null;\n    }\n\n    const date = new Date(\n      Date.UTC(1899, 11, 30) + value * 86400000\n    );\n\n    return date.toISOString().slice(0, 10);\n  }\n\n  const text = cleanText(value);\n\n  let year, month, day;\n  let match;\n\n  // ISO: YYYY-MM-DD\n  if (\n    (match = /^(\\d{4})-(\\d{1,2})-(\\d{1,2})$/.exec(text))\n  ) {\n    year = Number(match[1]);\n    month = Number(match[2]);\n    day = Number(match[3]);\n  }\n\n  // Slash date: DD/MM/YYYY or MM/DD/YYYY\n  else if (\n    (match = /^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})$/.exec(text))\n  ) {\n    const first = Number(match[1]);\n    const second = Number(match[2]);\n\n    year = Number(match[3]);\n\n    if (first > 12) {\n      day = first;\n      month = second;\n    } else if (second > 12) {\n      month = first;\n      day = second;\n    } else {\n      // Ambiguous: requires manual review\n      return null;\n    }\n  }\n\n  // DD-MM-YYYY\n  else if (\n    (match = /^(\\d{1,2})-(\\d{1,2})-(\\d{4})$/.exec(text))\n  ) {\n    day = Number(match[1]);\n    month = Number(match[2]);\n    year = Number(match[3]);\n  }\n\n  else {\n    return null;\n  }\n\n  const date = new Date(\n    Date.UTC(year, month - 1, day)\n  );\n\n  if (\n    date.getUTCFullYear() !== year ||\n    date.getUTCMonth() + 1 !== month ||\n    date.getUTCDate() !== day\n  ) {\n    return null;\n  }\n\n  return date.toISOString().slice(0, 10);\n}\n\n// --------------------------------------------------\n// 4. MAIN ETL PROCESS\n// --------------------------------------------------\n\nconst output = [];\n\nfor (let i = 0; i < items.length; i++) {\n\n  const errors = [];\n  let raw;\n\n  // STEP 1: Parse Excel JSON or LLM JSON text\n  try {\n    raw = parseInput(items[i]);\n  } catch (error) {\n    output.push({\n      json: {\n        Source_Row: i + 2,\n        Data_Quality: \"INVALID\",\n        Error_Count: 1,\n        Error_Details: \"JSON parse error: \" + error.message,\n        Raw_Data: JSON.stringify(items[i].json)\n      }\n    });\n    continue;\n  }\n\n  // STEP 2: Clean student fields\n  const student = {\n    Student_ID: cleanText(raw.Student_ID).toUpperCase(),\n    Full_Name: titleCase(raw.Full_Name),\n    Email: cleanEmail(raw.Email),\n    Phone: cleanPhone(raw.Phone),\n    Date_of_Birth: cleanDate(raw.Date_of_Birth),\n    Enrollment_Date: cleanDate(raw.Enrollment_Date),\n    Course: titleCase(raw.Course),\n    Score: cleanNumber(raw.Score),\n    Attendance_Pct: cleanNumber(raw.Attendance_Pct),\n    City: titleCase(raw.City),\n    Status: titleCase(raw.Status)\n  };\n\n  // STEP 3: Validate Student ID\n  if (!/^STU\\d{4}$/.test(student.Student_ID)) {\n    errors.push(\"Invalid or missing Student ID\");\n  }\n\n  if (student.Student_ID) {\n    if (seenIds.has(student.Student_ID)) {\n      errors.push(\"Duplicate Student ID\");\n    }\n    seenIds.add(student.Student_ID);\n  }\n\n  // STEP 4: Validate Full Name\n  if (\n    !student.Full_Name ||\n    !/^[A-Za-z][A-Za-z .'-]*$/.test(student.Full_Name)\n  ) {\n    errors.push(\"Invalid or missing Full Name\");\n  }\n\n  // STEP 5: Validate Email\n  const emailPattern = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n\n  if (!emailPattern.test(student.Email)) {\n    errors.push(\"Invalid or missing Email\");\n  }\n\n  if (student.Email) {\n    if (seenEmails.has(student.Email)) {\n      errors.push(\"Duplicate Email\");\n    }\n    seenEmails.add(student.Email);\n  }\n\n  // STEP 6: Validate Phone\n  if (!/^\\+?\\d{10,15}$/.test(student.Phone)) {\n    errors.push(\"Invalid Phone\");\n  }\n\n  // STEP 7: Validate Dates\n  if (!student.Date_of_Birth) {\n    errors.push(\"Invalid Date of Birth\");\n  }\n\n  if (!student.Enrollment_Date) {\n    errors.push(\"Invalid Enrollment Date\");\n  }\n\n  const today = new Date().toISOString().slice(0, 10);\n\n  if (\n    student.Date_of_Birth &&\n    student.Date_of_Birth > today\n  ) {\n    errors.push(\"Future Date of Birth\");\n  }\n\n  if (\n    student.Enrollment_Date &&\n    student.Enrollment_Date > today\n  ) {\n    errors.push(\"Future Enrollment Date\");\n  }\n\n  if (\n    student.Date_of_Birth &&\n    student.Enrollment_Date &&\n    student.Enrollment_Date < student.Date_of_Birth\n  ) {\n    errors.push(\"Enrollment Before Date of Birth\");\n  }\n\n  // STEP 8: Validate Course\n  if (!validCourses.includes(student.Course)) {\n    errors.push(\"Invalid Course\");\n  }\n\n  // STEP 9: Validate Score\n  if (\n    student.Score === null ||\n    student.Score < 0 ||\n    student.Score > 100\n  ) {\n    errors.push(\"Invalid Score\");\n  }\n\n  // STEP 10: Validate Attendance\n  if (\n    student.Attendance_Pct === null ||\n    student.Attendance_Pct < 0 ||\n    student.Attendance_Pct > 100\n  ) {\n    errors.push(\"Invalid Attendance\");\n  }\n\n  // STEP 11: Validate City\n  if (!student.City) {\n    errors.push(\"Missing City\");\n  }\n\n  // STEP 12: Validate Status\n  if (!validStatuses.includes(student.Status)) {\n    errors.push(\"Invalid Status\");\n  }\n\n  // STEP 13: Classify data quality\n  student.Data_Quality =\n    errors.length === 0 ? \"VALID\" : \"INVALID\";\n\n  student.Error_Count = errors.length;\n  student.Error_Details = errors.join(\"; \");\n  student.Source_Row = i + 2;\n\n  output.push({\n    json: student,\n    pairedItem: { item: i }\n  });\n}\n\n// --------------------------------------------------\n// 5. RETURN CLEANED DATA\n// --------------------------------------------------\n\nreturn output;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32,
+        -144
+      ],
+      "id": "63de88aa-7eb0-4df1-a18b-c10d4f2c9f2f",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        256,
+        -144
+      ],
+      "id": "91c34d34-d1d2-4cc8-9780-99edbec344c4",
+      "name": "Convert to File"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Excel upload": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "5ba17ef4-8cd6-47d9-966a-9d7c83a8d7f3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "0c6350da5075cb057fcfc5486ce103510f1129d94f78d734f6c4cbb63dea623c"
+  },
+  "nodeGroups": [],
+  "id": "Es2tm5Qu0mYaOIzF",
+  "tags": []
+}
