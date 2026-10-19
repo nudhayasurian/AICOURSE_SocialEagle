@@ -1,0 +1,135 @@
+{
+  "name": "Google Sheets to Gmail Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "sendTo": "nithy.ai.btp@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.body }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        224,
+        -128
+      ],
+      "id": "5777f35e-84ff-4b3f-a799-b3fd437d2cf7",
+      "name": "N8N Automation",
+      "webhookId": "ad8a5161-114e-4e9d-88d1-4b54c4e1724d",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "heLzdHfHsicdof4g",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -512,
+        -128
+      ],
+      "id": "391a8eea-feea-4798-9ea9-a9a2dd4ff5af",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1TAEpsRFaVE1H5o9s2ISl9__uCU4Urj5sguxUTn2hnSI",
+          "mode": "list",
+          "cachedResultName": "n8n spreadsheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1TAEpsRFaVE1H5o9s2ISl9__uCU4Urj5sguxUTn2hnSI/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "n8n Student Course Data",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1TAEpsRFaVE1H5o9s2ISl9__uCU4Urj5sguxUTn2hnSI/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -240,
+        -128
+      ],
+      "id": "7fd43869-b7fe-4970-bb42-cd6fa7acfcce",
+      "name": "Get row(s) in sheet",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zManQ8t5gSALzJQx",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst items = $input.all();\n\n// Read and validate student rows\nconst students = items\n  .map(item => item.json)\n  .filter(row =>\n    String(row.Name ?? \"\").trim() !== \"\" &&\n    String(row.Course ?? \"\").trim() !== \"\" &&\n    String(row.Status ?? \"\").trim() !== \"\"\n  );\n\n// Do not create an email when no valid rows exist\nif (students.length === 0) {\n  return [];\n}\n\n// Escape special HTML characters\nfunction escapeHtml(value) {\n  return String(value ?? \"\").replace(/[&<>\"']/g, char => ({\n    \"&\": \"&amp;\",\n    \"<\": \"&lt;\",\n    \">\": \"&gt;\",\n    '\"': \"&quot;\",\n    \"'\": \"&#39;\"\n  }[char]));\n}\n\n// Calculate student statistics\nconst completed = students.filter(\n  s => String(s.Status).trim().toLowerCase() === \"completed\"\n).length;\n\nconst inProgress = students.filter(\n  s => String(s.Status).trim().toLowerCase() === \"in progress\"\n).length;\n\nconst pending = students.filter(\n  s => String(s.Status).trim().toLowerCase() === \"pending\"\n).length;\n\n// Generate HTML table rows\nconst tableRows = students.map((student, index) => `\n  <tr>\n    <td style=\"padding:10px;border:1px solid #ddd;\">\n      ${index + 1}\n    </td>\n    <td style=\"padding:10px;border:1px solid #ddd;\">\n      ${escapeHtml(student.Name)}\n    </td>\n    <td style=\"padding:10px;border:1px solid #ddd;\">\n      ${escapeHtml(student.Course)}\n    </td>\n    <td style=\"padding:10px;border:1px solid #ddd;\">\n      ${escapeHtml(student.Status)}\n    </td>\n  </tr>\n`).join(\"\");\n\n// Generate email subject\nconst subject = `Student Course Status Report - ${students.length} Students`;\n\n// Generate email body\nconst body = `\n<html>\n<body style=\"font-family:Arial,sans-serif;color:#333;\">\n\n  <h2 style=\"color:#176b46;\">\n    Student Course Status Report\n  </h2>\n\n  <p>Hello Team,</p>\n\n  <p>\n    Please find below the latest student course\n    status report generated from Google Sheets.\n  </p>\n\n  <h3>Summary</h3>\n\n  <ul>\n    <li>Total Students: ${students.length}</li>\n    <li>Completed: ${completed}</li>\n    <li>In Progress: ${inProgress}</li>\n    <li>Pending: ${pending}</li>\n  </ul>\n\n  <h3>Student Details</h3>\n\n  <table style=\"border-collapse:collapse;width:100%;\">\n    <thead>\n      <tr style=\"background-color:#176b46;color:white;\">\n        <th style=\"padding:10px;border:1px solid #ddd;\">#</th>\n        <th style=\"padding:10px;border:1px solid #ddd;\">Name</th>\n        <th style=\"padding:10px;border:1px solid #ddd;\">Course</th>\n        <th style=\"padding:10px;border:1px solid #ddd;\">Status</th>\n      </tr>\n    </thead>\n    <tbody>\n      ${tableRows}\n    </tbody>\n  </table>\n\n  <p>Regards,<br>\n  n8n Automation</p>\n\n  <p style=\"font-size:12px;color:#777;\">\n    This is an automatically generated email.\n  </p>\n\n</body>\n</html>\n`;\n\n// Return a single email item\nreturn [{\n  json: {\n    subject,\n    body,\n    studentCount: students.length,\n    completed,\n    inProgress,\n    pending\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        -128
+      ],
+      "id": "b43a4c4f-a6f0-4c69-afd6-f4bfe57e5383",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "N8N Automation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "113d6242-728e-4ea0-bed6-30d76470852a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "0c6350da5075cb057fcfc5486ce103510f1129d94f78d734f6c4cbb63dea623c"
+  },
+  "nodeGroups": [],
+  "id": "0THVU5nxxk4Z3PqW",
+  "tags": []
+}
