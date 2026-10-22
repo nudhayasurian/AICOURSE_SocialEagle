@@ -1,0 +1,226 @@
+{
+  "name": "LinkedIn Post Approval Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "LinkedIn AI Post Generator",
+        "formDescription": "Enter a topic to generate a professional LinkedIn post for your approval.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Topic",
+              "fieldType": "textarea",
+              "placeholder": "e.g., How AI is transforming SAP ERP integrations",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "buttonLabel": "Generate LinkedIn Post"
+        }
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        -784,
+        -144
+      ],
+      "id": "d123881f-3a5e-4fc0-8753-e77c8a2237e0",
+      "name": "On form submission",
+      "webhookId": "03c3773f-a621-4c5f-80a2-1e0744d9dee4"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Write a professional LinkedIn post about the following topic:\n{{ $json.Topic }}",
+        "options": {
+          "systemMessage": "You are an experienced LinkedIn content writer specializing in technology, AI, enterprise software, SAP ERP, and professional thought leadership.\n\nYour task is to write one compelling LinkedIn post based on the user's topic.\n\nRequirements:\n1. Write 120–180 words.\n2. Begin with an engaging opening hook.\n3. Use short paragraphs suitable for LinkedIn.\n4. Keep the tone professional, authoritative, clear, and conversational.\n5. Include practical insights or takeaways.\n6. Use at most 3 relevant hashtags at the end.\n7. End with a thoughtful question encouraging engagement.\n8. Avoid exaggerated claims, invented statistics, fabricated personal experience, and unsupported facts.\n9. Do not use generic AI introductory phrases or excessive emojis.\n10. Return only the LinkedIn post, without explanations, headings, or commentary.\n\nThe post will be reviewed by a separate Reviewer Agent before human approval."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -592,
+        -144
+      ],
+      "id": "57c11493-a19f-459b-b039-ab8181e4115d",
+      "name": "Writer Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 500,
+          "temperature": 0.7
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -592,
+        96
+      ],
+      "id": "3d3ee30f-2967-4614-b71b-af9ab9199087",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "77XCtkGMVkZaIvy1",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 600,
+          "temperature": 0.3
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -256,
+        96
+      ],
+      "id": "e352d426-0571-461c-a6c5-aa172f4f0197",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "77XCtkGMVkZaIvy1",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "sendTo": "nithya.ai.btp@gmail.com",
+        "subject": "=LinkedIn Post Approval Required - {{ $('On form submission').item.json.Topic }}",
+        "message": "=Hello,\n\nYour AI-generated LinkedIn post has been reviewed and is ready for your approval.\n\nTOPIC:{{ $('On form submission').item.json.Topic }}\n\n\nFINAL LINKEDIN POST:\n{{ $json.output }}\n\n\nPlease review the post and choose Approve or Reject using the buttons below.\n\nApprove: Allow this post to be saved to Google Sheets.\nReject: End the workflow without saving the post.\n\nThis workflow does not publish posts directly to LinkedIn.\n\nLinkedIn Post Approval Automation",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double"
+          }
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        112,
+        -144
+      ],
+      "id": "ec5640db-37b9-46b5-abbc-d2868fb14fc1",
+      "name": "Gmail - LinkedIn Approval",
+      "webhookId": "bbf3a350-e0e8-49b8-ac99-76eee48fc9d2",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "heLzdHfHsicdof4g",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Review and improve the following LinkedIn post.\nOriginal Topic:\n{{ $('On form submission').item.json.Topic }}\n\n\n\nWriter Agent Draft:\n{{ $json.output }}\n\nReturn only the final improved LinkedIn post, ready for human approval.",
+        "options": {
+          "systemMessage": "You are a senior LinkedIn content editor and professional communications reviewer.\n\nYour role is to review a LinkedIn post created by a separate Writer Agent and produce a polished final version.\n\nREVIEW STANDARDS:\n1. Relevance: The post must remain focused on the original topic.\n2. Clarity: Rewrite confusing sentences and eliminate unnecessary jargon.\n3. Grammar: Correct spelling, punctuation, grammar, and sentence structure.\n4. Professional Tone: Maintain an authoritative, credible, and conversational leadership voice.\n5. Engagement: Strengthen the opening hook and end with a thoughtful question.\n6. Structure: Use short LinkedIn-friendly paragraphs and logical transitions.\n7. Length: Aim for 120–180 words.\n8. Accuracy: Remove unsupported statistics, fabricated experiences, unverifiable claims, and exaggerated promises. Do not introduce new unsupported claims.\n9. Originality: Eliminate repetitive phrases, clichés, and generic AI-generated language.\n10. Hashtags: Use no more than three relevant hashtags at the end.\n\nIMPORTANT RULES:\n- Preserve the original topic, core meaning, and useful insights.\n- Rewrite the entire post when necessary rather than simply describing problems.\n- Do not add fabricated personal stories, credentials, or achievements.\n- Do not provide review notes, explanations, quality scores, or a list of changes.\n- Do not add labels such as \"Revised Post\" or \"Final Version\".\n- Return only the complete, publication-ready LinkedIn post as plain text.\n\nThe output will be emailed to a human approver. It must not be published or saved automatically."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -256,
+        -144
+      ],
+      "id": "9277e7c3-f039-4a34-a27e-cf21dd873726",
+      "name": "Reviewer Agent"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Writer Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Writer Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Writer Agent": {
+      "main": [
+        [
+          {
+            "node": "Reviewer Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Reviewer Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reviewer Agent": {
+      "main": [
+        [
+          {
+            "node": "Gmail - LinkedIn Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "ba15786f-d5db-4a69-957e-6322ee8ae8d9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "0c6350da5075cb057fcfc5486ce103510f1129d94f78d734f6c4cbb63dea623c"
+  },
+  "nodeGroups": [],
+  "id": "pnVJDjcn6C7cMwSn",
+  "tags": []
+}
